@@ -1,5 +1,5 @@
 #!/usr/bin/python
-from datastructure import Dataset
+from algorithms.datastructure import Dataset
 """
 Inherit with:
     class MyAlgorithm(CrowdAlgorithm):

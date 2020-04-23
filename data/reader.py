@@ -27,8 +27,8 @@ class DataReader:
         """
 
         #tba
-        ans_file = open(self.answer)
-        ans_file.next() #skip header
+        ans_file = open(self.answer, "r+")
+        ans_file.readline() #skip header
         for i in ans_file:
             line = i.split(',')
             qa = line[0]
@@ -54,6 +54,8 @@ class DataReader:
             # add worker's answer to a general unmanaged list of all answers
             self.answers.append((q, w, w_ans))
         #end for
+
+        ans_file.close()
     #end constructor
 #end class
 

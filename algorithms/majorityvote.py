@@ -1,5 +1,5 @@
 #!/usr/bin/python
-from algointerface import CrowdAlgorithm
+from algorithms.algointerface import CrowdAlgorithm
 
 class MajorityVoting(CrowdAlgorithm):
     def __init__(self, train, validation):
