@@ -14,7 +14,7 @@ class Dataset:
     """
     questions is a dictionary here
         KEY is a QUESTION
-        VALUE is an int which is either 0 or 1 denoting False/True resp.
+        VALUE is an ANSWER
     """
     questions = dict()
 
