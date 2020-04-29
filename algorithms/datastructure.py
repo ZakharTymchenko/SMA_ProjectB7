@@ -41,13 +41,13 @@ def ArrangeData(q_train, q_valid, q_test, workers, answers):
     test.questions = q_test
 
     train.workers = dict(
-        (w, [q for q in wq if q[1] in q_train]) for (w, wq) in workers.items()
+        (w, [q for q in wq if q[0] in q_train]) for (w, wq) in workers.items()
     )
     valid.workers = dict(
-        (w, [q for q in wq if q[1] in q_valid]) for (w, wq) in workers.items()
+        (w, [q for q in wq if q[0] in q_valid]) for (w, wq) in workers.items()
     )
     test.workers = dict(
-        (w, [q for q in wq if q[1] in q_test]) for (w, wq) in workers.items()
+        (w, [q for q in wq if q[0] in q_test]) for (w, wq) in workers.items()
     )
 
     train.answers = [
