@@ -7,7 +7,7 @@ from algorithms.datastructure import ArrangeData
 
 from algorithms.algointerface import CrowdAlgorithm
 from algorithms.majorityvote import MajorityVoting
-#from algorithms.dawidskene import DavidSkene
+from algorithms.dawidskene import DawidSkene
 
 # this file is the entry point to the project, everything is branched from here
 
@@ -41,12 +41,13 @@ def main():
     # initialize algorithms
     algos = []
     algos.append(MajorityVoting(train, validation))
-    #algos.append(DawidSkene(train, validation, ds_seed))
+    algos.append(DawidSkene(train, validation)) #, ds_seed))
 
 
     for alg in algos:
         print("")
         print("Algorithm - " + alg.name)
+
 
         # get a test set w/o ground values
         test_set = Dataset()
@@ -57,7 +58,7 @@ def main():
         test_set.answers = test.answers
 
         # train the algo
-        alg.fit()
+        alg.fit(test_set)
         # get back test result
         test_res = alg.test(test_set)
 

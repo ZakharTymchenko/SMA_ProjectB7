@@ -8,7 +8,7 @@ class MajorityVoting(CrowdAlgorithm):
 
 
     #@OVERRIDE
-    def fit(self):
+    def fit(self, trainset):
         None
     #end function
 
