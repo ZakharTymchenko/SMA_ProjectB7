@@ -13,8 +13,8 @@ from algorithms.dawidskene import DawidSkene
 
 # constants [todo: rework into CLI args with hardcoded defaults]
 main_path = "data"
-split_seed = hash("PROJECT--B7--SPLIT--2138796")
-ds_seed = hash("PROJECT--B7--DS--9453657")
+split_seed = 2138796
+ds_seed = 9453657
 
 
 def main():
@@ -30,6 +30,8 @@ def main():
     print("Total workers: " + str(len(workers)))
     print("Total answers: " + str(len(answers)))
 
+    print("class 0:", sum([1 if i == 0 else 0 for i in questions.values()]) / sum([1 for _ in questions.values()]))
+
     # split into train/validation/test
     (q_train, q_validation, q_test) = SplitData(split_seed, list(questions.items()))
     (train, validation, test) = ArrangeData(q_train, q_validation, q_test, workers, answers)
@@ -41,8 +43,7 @@ def main():
     # initialize algorithms
     algos = []
     algos.append(MajorityVoting(train, validation))
-    algos.append(DawidSkene(train, validation)) #, ds_seed))
-
+    algos.append(DawidSkene(train, validation, ds_seed))
 
     for alg in algos:
         print("")
@@ -58,7 +59,7 @@ def main():
         test_set.answers = test.answers
 
         # train the algo
-        alg.fit(test_set)
+        alg.fit()
         # get back test result
         test_res = alg.test(test_set)
 
