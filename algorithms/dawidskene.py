@@ -181,7 +181,7 @@ class DawidSkene(CrowdAlgorithm):
 
         for e in range(0, len(arr)):
             if arr[e] > val:
-                val = e
+                val = arr[e]
                 i = e
         
         return i
