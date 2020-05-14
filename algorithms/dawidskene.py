@@ -2,178 +2,100 @@
 from random import Random
 from copy import deepcopy
 from algorithms.algointerface import CrowdAlgorithm
+from algorithms.majorityvote import MajorityVoting
 
 class DawidSkene(CrowdAlgorithm):
-    # prior
+    # data info
     classes = []
-    C = 0
     rng = None
-    q_order = {}
+    priors, confusion = None, None
+    bestf1 = -1.0
+    last_p_e, last_priors, last_confusion = None, None, None
 
-    # training
-    p_i = None
-    conf_mat_w = None
-    t_nj_w = None
+    # params
+    init = "random"
+    max_iter = 100
 
-    def __init__(self, train, validation, init_seed):
-        CrowdAlgorithm.__init__(self, "DawidSkene", train, validation)
+    """
+    The constructor for Dawid-Skene crowd algorithm.
+    ArgIn:
+        -- full : DATASET with all questions, workers and answers
+        -- train, validation, test : DATSET with limited questions and resp. subsets of workers and answers
+                                     test should have ground answers removed and set to None
+        -- init_type : String, determines init type for p_e. Options are:
+            ** random : random 1 or 0 for each class;
+            ** flat : 0.5 +/- rnd for each class;
+            ** mv : winner-take-all majority voting;
+            ** mv_w : p_e gets assigned a probability with all votes having equal count
+        -- max_iter : Int, sets an upper limit to the # of iterations of DS that can't be breached regardless of convergence
+    No training is performed in the constructor.
+    """
+    def __init__(self, full, train, validation, test, init_seed, init_type = "random", max_iter = 100):
+        CrowdAlgorithm.__init__(self, "DawidSkene", full, train, validation, test)
         # init classes
-        for i in train.questions.values(): # == answers
-            if not i in self.classes:
+        for i in full.questions.values(): # == answers
+            if i != None and not i in self.classes:
                 self.classes.append(i)
         
         self.C = len(self.classes)
 
         # init PRNG
         self.rng = Random(init_seed)
+
+        # init param
+        self.init = init_type
+        self.max_iter = max_iter
     #end constructor
 
-
     #@OVERRIDE
-    def fit(self):
-        c = self.C
+    def run(self):
+        p_e = self.ds_init()
 
-        self.init_qorder(self.train)
-        self.calc_t_nj_w(self.train)
-        
-        p_e = []
-        for _ in range(0, c):
-            p_e.append([0].copy() * len(self.train.questions.keys()))
+        # main loop
+        for _ in range(0, self.max_iter):
+            # Step 1 [semi-supervision] : update p_e with train values
+            for q,a in self.train.questions.items():
+                for c in self.classes:
+                    p_e[q][c] = 1.0 if c == a else 0.0
+                #end for
+            #end for
 
-        for a in range(0, len(self.train.questions.keys())):
-            p_e[self.rng.randint(0, c - 1)][a] = 1
-        #for q,a in self.train.questions.items(): #question_id, answer
-        #    p_e[a][self.q_order[q]] = 1 # first index - class of the answer, second index - question's ordered index
-        
-        # M-step single iteration that will infer prior and confusion
-        (self.p_i, self.conf_mat_w, self.t_nj_w) = self.m_step(p_e, self.train)
+            # Step 2 [training] : perform M-step and E-step
+            (priors, confusion) = self.M_step(p_e, self.full)
+            p_e = self.E_step(priors, confusion, self.full)
 
-        ##DEBUG
-        for _ in range(0, 10):
-            p_i, conf_mat_w, t_nj_w = self.m_step(p_e, self.train)
-            p_e = self.e_step(p_i, conf_mat_w, t_nj_w, self.train)
-        #p_e = self.e_step(self.p_i, self.conf_mat_w, self.t_nj_w, self.train)
-        
-        acc = 0.0
-        total = 0.0
-        for i in self.train.questions.keys():
-            ord = self.q_order[i]
-            prob = list([i[ord] for i in p_e])
-            print(i, self.train.questions[i], self.idx_max(prob), prob)
-            acc += 1 if self.train.questions[i] == self.idx_max(prob) else 0
-            total += 1
-        print("acc", acc/total)
-        exit()
+            print(priors)
+
+            # Step 3 [validation] : check accuracy on validation and update the matrices
+            _, _, f1score, _ = self.validate(self.validation, self.infer_answers(p_e, self.validation))
+            print("DEBUG", ("best_f1", self.bestf1), ("current_f1", f1score))
+            if f1score >= self.bestf1:
+                self.bestf1 = f1score
+                (self.priors, self.confusion) = (priors, confusion)
+            #end if
+
+            # Step 4 [convergence check] : check if our iterations don't bring value any more
+            if self.convergence(priors, confusion, p_e):
+                break
+        #end while
+
+        # return testset evaluated on best valid
+        p_e = self.E_step(self.priors, self.confusion, self.test)
+        return self.infer_answers(p_e, self.test)
     #end function
 
-    def m_step(self, true_labels, trainset):
+    ###########################
+    ### ORGANIZATIONAL PART ###
+    ###########################
 
-        c = self.C
-        # Estimate the class prior
-
-        # number of itemns
-        n = len(trainset.questions.keys())
-
-        p_i = [0] * c
-        # count occurences of classes from true_labels in list
-        for i in range(0, len(true_labels)):
-            for x in true_labels[i]:
-                p_i[i] += x
-
-        # devide through number of items to get class prior
-        for i in range(0, len(p_i)):
-            p_i[i] = p_i[i] / n
-
-        print(p_i)
-        # Estimate the confusion matrices
-
-        #
-        T_ni = deepcopy(true_labels)
-
-        t_nj_w = self.t_nj_w
-
-        # confusion matrix
-        conf_mat_w = []
-        conf_top = 0.0
-        conf_bot = [0.0] * c
-        conf_mat = []
-
-        for _ in range(0, c):
-            conf_mat.append([0.0] * c)
-
-        conf_mat_blank = deepcopy(conf_mat)
-        for w_count in range(0, len(trainset.workers)):
-            for i in range(0, c):
-                for j in range(0, c):
-                    for item in range(0, n):
-                        conf_top += T_ni[i][item] * t_nj_w[w_count][j][item]
-
-                    conf_mat[i][j] = conf_top
-                    conf_bot[i] += conf_top
-                    conf_top = 0.0
-
-            # divide the row through the sum of
-            for i in range(0, c):
-                for j in range(0, c):
-                    if conf_bot[i] > 0.0:
-                        conf_mat[i][j] = conf_mat[i][j]  / conf_bot[i]
-            
-            conf_bot = [0] * c
-            conf_mat_w.append(conf_mat)
-            conf_mat = deepcopy(conf_mat_blank)
-
-        return p_i, conf_mat_w, t_nj_w
-    # end function
-
-    def e_step(self, p_i, conf_mat_w, t_nj_w, trainset):
-        c = self.C
-        n = len(trainset.questions)
-
-        p_e= []
-        for _ in range(0, c):
-            p_e.append([0] * n)
-        p_et = 1
-        p_et_ave = 0
-
-        for a in range(0, n):
-            for i in range(0, c):
-                p_et = p_i[i]
-                for m in range(0, len(trainset.workers)):
-                    for j in range(0, c):
-                        p_et *= conf_mat_w[m][i][j] ** t_nj_w[m][j][a]
-                p_e[i][a] = p_et
-                p_et_ave += p_et
-
-            if p_et_ave > 0:
-                for x in range(0, c):
-                    p_e[x][a] = p_e[x][a] / p_et_ave
-
-            p_et_ave = 0
-        return p_e
-
-    def random_init(self,trainset):
-
-
-        mat = []
-        mat_tmp = [-1] * (len(trainset.questions))
-
-        for w in trainset.workers:
-            for x in trainset.workers[w]:
-                j = self.q_order[x[0]]
-                mat_tmp[j] = x[1]
-            mat.append(mat_tmp)
-            mat_tmp = [-1] * (len(trainset.questions))
-
-        return mat
-
-    def init_qorder(self,dataset):
-        self.q_order = {}
-
-        # init q_order
-        i = 0
+    def infer_answers(self, p_e, dataset):
+        answers = {}
         for q in dataset.questions.keys():
-            self.q_order[q] = i
-            i += 1
+            prob = p_e[q]
+            ans = self.idx_max(prob)
+            answers[q] = ans
+        return answers
+
 
     def idx_max(self,arr):
         val = -1
@@ -183,46 +105,120 @@ class DawidSkene(CrowdAlgorithm):
             if arr[e] > val:
                 val = arr[e]
                 i = e
-        
+
         return i
 
-    def calc_t_nj_w(self,dataset):
-        c = self.C
-        n = len(dataset.questions)
 
-        t_nj_w = []
-        t_nj = []
-        for _ in range(0, c):
-            t_nj.append([0] * n)
-        t_nj_blank = deepcopy(t_nj)
-        # create t_nj for every worker, an list that has c rows and n column
-        # An entry is 1 if the worker said the item is labeled as c
-        for w in dataset.workers:
-            for x in dataset.workers[w]:
-                j = self.q_order[x[0]]
-                t_nj[x[1]][j] = 1
+    ########################
+    ### ALGORITHMIC PART ###
+    ########################
 
-            t_nj_w.append(t_nj)
-            t_nj = deepcopy(t_nj_blank)
+    def convergence(self, priors, confusion, p_e):
+        # pull up data from cache
+        (last_priors, last_confusion, last_p_e) = (self.last_priors, self.last_confusion, self.last_p_e)
 
-        self.t_nj_w = t_nj_w
+        # check for convergence
+        converged = False
 
-    #@OVERRIDE
-    def test(self, testset):
-        self.init_qorder(testset)
-        self.calc_t_nj_w(testset)
+        #todo: implement
 
-        p_e = self.e_step(self.p_i, self.conf_mat_w, self.t_nj_w, testset)
+        # update cached values
+        (self.last_priors, self.last_confusion, self.last_p_e) = (priors, confusion, p_e)
+
+        # return result
+        return converged
+
+    def ds_init(self):
+        # init p_e with either mv (2 types), or at random (2 types)
+        if self.init == "random":
+            print("[DS::Init] random_init")
+            p_e = dict([(q, [0.0 for c in self.classes]) for q,_ in self.full.questions.items()]) # 0-init first
+            
+            for q in self.full.questions.keys():
+                p_e[q][self.classes[self.rng.randint(0, self.C - 1)]] = 1.0 # set a random class to 1
+        elif self.init == "flat":
+            print("[DS::Init] flatbase_random_init")
+            p_e = dict([(q, [1.0 / len(self.classes) for c in self.classes]) for q,_ in self.full.questions.items()])
+
+            for q in self.full.questions.keys():
+                mod = self.rng.uniform(-0.5,0.5) / 3
+                for c in self.classes:
+                    p_e[q][c] += ((-1) ** (c+1)) * mod
+        elif self.init == "mv":
+            print("[DS::Init] majority_voting")
+            p_e = dict([(q, [0.0 for c in self.classes]) for q,_ in self.full.questions.items()])
+            mv_answers = MajorityVoting(None, None, None, self.full).run()
+
+            for q,a in mv_answers.items():
+                for c in self.classes:
+                    p_e[q][c] = 1.0 if a == c else 0.0
+        elif self.init == "mv_w":
+            print("[DS::Init] weighted_majority_voting")
+            p_e = dict([(q, [0.0 for c in self.classes]) for q,_ in self.full.questions.items()])
+
+            for q,a in self.full.questions.items():
+                for c in self.classes:
+                    p_e[q][c] = sum([1.0 if a == c else 0.0 for a in self.full.answers])
+        else:
+            print("[DS::Init::fallback] ground_init")
+            print("Unsupported init for semi-supervised, aborting")
+            exit()
+            p_e = dict([(q, [1.0 if c == a else 0.0 for c in self.classes]) for q,a in self.full.questions.items()])
+
+        return p_e
+
+
+    def E_step(self, priors, confusion, dataset):
+        p_e = dict()
+
+        for q in dataset.questions:
+            Qp_e = [0.0 for _ in self.classes]
+            total = 0.0
+
+            # only get workers' answers to this question
+            workers = [(w, [a[1] for a in ans if a[0] == q]) for w,ans in dataset.workers.items()]
+            workers = dict([(w,ans[0]) for w,ans in workers if ans != []])
+
+            for i,prob in priors.items():
+                for (w,ans) in workers.items():
+                    j = ans
+                    prob *= confusion[w][i][j] # this will take a p_i as a baseline and multiply it by pi_i,j elements
+                #end for
+                Qp_e[i] = prob
+                total += prob
+            #end for
+            p_e[q] = [prob / total if total > 0.0 else 1.0/len(self.classes) for prob in Qp_e] # class inferrence impossible, set to random
+
+        return p_e
+
+    def M_step(self, p_e, dataset):
+        # step 0 : some vars
+        q_no = float(len(dataset.questions))
+
+        # step 1 : prior
+        priors = dict([(c, sum([p_e[q][c] for q in dataset.questions.keys()]) / q_no) for c in self.classes])
+
+        # step 2 : confusion
+        confusion = dict()
+
+        for w,ans in dataset.workers.items():
+            matrix = [[0.0 for _ in self.classes] for _ in self.classes]
+
+            # precalc denominator
+            denominator = dict([(c, 0.0) for c in self.classes])
+
+            for (q,_) in ans:
+                for i in self.classes:
+                    denominator[i] += p_e[q][i]
+
+            # calc confusion
+            for i in self.classes:
+                if denominator[i] == 0.0:
+                    matrix[i][j] = 1.0 / len(self.classes) # uniform, his guess is as good as random
+                    continue
+                for q,j in ans:
+                    matrix[i][j] += p_e[q][i] / denominator[i]
+
+            confusion[w] = matrix
         
-        for _ in range(0, 8):
-            p_i, conf_mat_w, t_nj_w = self.m_step(p_e, testset)
-            p_e = self.e_step(p_i, conf_mat_w, t_nj_w, testset)
-        
-        for i in testset.questions.keys():
-            ord = self.q_order[i]
-            prob = list([i[ord] for i in p_e])
-            testset.questions[i] = self.idx_max(prob)
-            #print((testset.questions[i], prob))
-
-        return testset.questions
-    #end function
+        return (priors, confusion)

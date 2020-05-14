@@ -2,19 +2,13 @@
 from algorithms.algointerface import CrowdAlgorithm
 
 class MajorityVoting(CrowdAlgorithm):
-    def __init__(self, train, validation):
-        CrowdAlgorithm.__init__(self, "MajorityVoing", train, validation)
+    def __init__(self, full, train, validation, test):
+        CrowdAlgorithm.__init__(self, "MajorityVoing", full, train, validation, test)
     #end constructor
 
-
     #@OVERRIDE
-    def fit(self):
-        None
-    #end function
-
-
-    #@OVERRIDE
-    def test(self, testset):
+    def run(self):
+        testset = self.test
         q_res = dict()
 
         # for each question add an entry QUESTION => [0, 0]

@@ -1,4 +1,6 @@
 #!/usr/bin/python
+from copy import deepcopy
+
 from data.reader import DataReader
 from data.splitter import SplitData
 
@@ -34,46 +36,36 @@ def main():
 
     # split into train/validation/test
     (q_train, q_validation, q_test) = SplitData(split_seed, list(questions.items()))
-    (train, validation, test) = ArrangeData(q_train, q_validation, q_test, workers, answers)
+    (full, train, validation, test) = ArrangeData(questions, q_train, q_validation, q_test, workers, answers)
 
     print("Train size", len(train.questions), len(train.workers), len(train.answers))
     print("Validation size", len(validation.questions), len(validation.workers), len(validation.answers))
     print("Test size", len(test.questions), len(test.workers), len(test.answers))
 
+    # cut ground for test set but keep a local copy
+    test_set = deepcopy(test)
+    for q in test.questions.keys():
+        test.questions[q] = None
+        full.questions[q] = None
+    #end for
+
     # initialize algorithms
     algos = []
-    algos.append(MajorityVoting(train, validation))
-    algos.append(DawidSkene(train, validation, ds_seed))
+    algos.append(MajorityVoting(full, train, validation, test))
+    algos.append(DawidSkene(full, train, validation, test, ds_seed, "mv_w", 10))
 
     for alg in algos:
         print("")
         print("Algorithm - " + alg.name)
+        # run the algo
+        test_ans = alg.run()
 
-
-        # get a test set w/o ground values
-        test_set = Dataset()
-        for k in test.questions.keys():
-            test_set.questions[k] = None
-        #end for
-        test_set.workers = test.workers
-        test_set.answers = test.answers
-
-        # train the algo
-        alg.fit()
-        # get back test result
-        test_res = alg.test(test_set)
-
-        # process the output
-        #todo
-        accuracy = 0.0
-        for q in test_res:
-            if test_res[q] == test.questions[q]:
-                accuracy += 1.0
-            #end if
-        #end for
-
-        accuracy /= len(test.questions)
-        print("accuracy", accuracy)
+        # get back metrics
+        (precision, recall, f1score, accuracy) = alg.validate(test_set, test_ans)
+        print(("precision", precision))
+        print(("recall", recall))
+        print(("f1score", f1score))
+        print(("accuracy", accuracy))
     #end for
 #end function
 

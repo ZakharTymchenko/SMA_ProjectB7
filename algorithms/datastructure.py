@@ -31,15 +31,18 @@ class Dataset:
     answers = []
 #end class
 
-def ArrangeData(q_train, q_valid, q_test, workers, answers):
+def ArrangeData(questions, q_train, q_valid, q_test, workers, answers):
+    full = Dataset()
     train = Dataset()
     valid = Dataset()
     test = Dataset()
 
+    full.questions = questions
     train.questions = q_train
     valid.questions = q_valid
     test.questions = q_test
 
+    full.workers = workers
     train.workers = dict(
         (w, [q for q in wq if q[0] in q_train]) for (w, wq) in workers.items()
     )
@@ -50,6 +53,7 @@ def ArrangeData(q_train, q_valid, q_test, workers, answers):
         (w, [q for q in wq if q[0] in q_test]) for (w, wq) in workers.items()
     )
 
+    full.answers = answers
     train.answers = [
         ans for ans in answers if ans[0] in q_train
     ]
@@ -60,4 +64,4 @@ def ArrangeData(q_train, q_valid, q_test, workers, answers):
         ans for ans in answers if ans[0] in q_test
     ]
 
-    return (train, valid, test)
+    return (full, train, valid, test)
