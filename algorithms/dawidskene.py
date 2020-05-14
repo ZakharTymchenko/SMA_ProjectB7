@@ -141,7 +141,7 @@ class DawidSkene(CrowdAlgorithm):
     # checks the convergene of the priors
     def checkConv_priors(self, dic, last_dic):
         for i in dic:
-            if round(dic[i], 4) != round(last_dic[i], 4):
+            if round(dic[i], 1) != round(last_dic[i], 1):
                 return False
         return True
 
@@ -149,7 +149,7 @@ class DawidSkene(CrowdAlgorithm):
     def checkConv_p_e(self, dic, last_dic):
         for i in dic:
             for j in range(len(dic[i])):
-                if round(dic[i][j], 4) != round(last_dic[i][j], 4):
+                if round(dic[i][j], 1) != round(last_dic[i][j], 1):
                     return False
         return True
 
@@ -158,7 +158,7 @@ class DawidSkene(CrowdAlgorithm):
         for i in dic:
             for j in range(len(dic[i])):
                 for k in range(len(dic[i][j])):
-                    if round(dic[i][j][k], 4) != round(last_dic[i][j][k], 4):
+                    if round(dic[i][j][k], 1) != round(last_dic[i][j][k], 1):
                         return False
         return True
 

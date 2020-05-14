@@ -9,7 +9,7 @@ from algorithms.datastructure import ArrangeData
 
 from algorithms.algointerface import CrowdAlgorithm
 from algorithms.majorityvote import MajorityVoting
-from algorithms.dawidskene import DawidSkene
+from algorithms.dawidskene_legacy import DawidSkene
 
 # this file is the entry point to the project, everything is branched from here
 
