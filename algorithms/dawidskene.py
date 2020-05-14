@@ -1,6 +1,6 @@
 #!/usr/bin/python
+import copy
 from random import Random
-from copy import deepcopy
 from algorithms.algointerface import CrowdAlgorithm
 from algorithms.majorityvote import MajorityVoting
 
@@ -52,7 +52,8 @@ class DawidSkene(CrowdAlgorithm):
         p_e = self.ds_init()
 
         # main loop
-        for _ in range(0, self.max_iter):
+        for iter in range(0, self.max_iter):
+            print('Iteration' + str(iter) )
             # Step 1 [semi-supervision] : update p_e with train values
             for q,a in self.train.questions.items():
                 for c in self.classes:
@@ -120,13 +121,46 @@ class DawidSkene(CrowdAlgorithm):
         # check for convergence
         converged = False
 
-        #todo: implement
+
+        # check if this is first iteration, if yes convergence check can't be done
+        if last_p_e is not None:
+            # check one after another if p_e, priors and confusion matrices are converged
+            if self.checkConv_p_e(p_e, last_p_e):
+                if self.checkConv_priors(priors, last_priors):
+                    if self.checkConv_confusion(confusion, last_confusion):
+                        converged = True
+
 
         # update cached values
-        (self.last_priors, self.last_confusion, self.last_p_e) = (priors, confusion, p_e)
+        self.last_p_e = copy.deepcopy(p_e)
+        (self.last_priors, self.last_confusion) = (priors, confusion)
 
         # return result
         return converged
+
+    # checks the convergene of the priors
+    def checkConv_priors(self, dic, last_dic):
+        for i in dic:
+            if round(dic[i], 4) != round(last_dic[i], 4):
+                return False
+        return True
+
+    # checks the convergene of the true labels
+    def checkConv_p_e(self, dic, last_dic):
+        for i in dic:
+            for j in range(len(dic[i])):
+                if round(dic[i][j], 4) != round(last_dic[i][j], 4):
+                    return False
+        return True
+
+    # checks the convergene of the confusion matrices
+    def checkConv_confusion(self, dic, last_dic):
+        for i in dic:
+            for j in range(len(dic[i])):
+                for k in range(len(dic[i][j])):
+                    if round(dic[i][j][k], 4) != round(last_dic[i][j][k], 4):
+                        return False
+        return True
 
     def ds_init(self):
         # init p_e with either mv (2 types), or at random (2 types)

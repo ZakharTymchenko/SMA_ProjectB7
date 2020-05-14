@@ -52,7 +52,7 @@ def main():
     # initialize algorithms
     algos = []
     algos.append(MajorityVoting(full, train, validation, test))
-    algos.append(DawidSkene(full, train, validation, test, ds_seed, "mv_w", 10))
+    algos.append(DawidSkene(full, train, validation, test, ds_seed, "mv_w", 100))
 
     for alg in algos:
         print("")
