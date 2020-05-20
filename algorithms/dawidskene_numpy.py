@@ -1,9 +1,10 @@
 #!/usr/bin/python
-import copy
+import time
 from random import Random
+import copy
 from copy import deepcopy
 from algorithms.algointerface import CrowdAlgorithm
-import time
+import numpy as np
 
 class DawidSkene(CrowdAlgorithm):
     # data info
@@ -56,25 +57,24 @@ class DawidSkene(CrowdAlgorithm):
 
         self.init_qorder(self.full)
         self.calc_t_nj_w(self.full)
-        
+
         p_e = self.random_init(self.full)
         avg_time = 0
         ##DEBUG
-
         for iter in range(0, self.max_iter):
             t0 = time.time()
             print('Iteration' + str(iter))
             # Step 1 [semi-supervision] : update p_e with train values
             for q,a in self.train.questions.items():
                 for c in range(self.C):
-                     p_e[c][self.q_order[q]] = 1.0 if c == a else 0.0
+                     p_e[c, self.q_order[q]] = 1.0 if c == a else 0.0
                 #end for
             #end for
 
             # Step 2 [training] : perform M-step and E-step
-
             p_i, conf_mat_w = self.m_step(p_e, self.full)
             p_e = self.e_step(p_i, conf_mat_w, self.full)
+
 
 
             # Step 3 [validation] : check accuracy on validation and update the matrices
@@ -91,43 +91,16 @@ class DawidSkene(CrowdAlgorithm):
             t1 = time.time()
             avg_time += t1-t0
 
-
         if iter != 0:
             avg_time /= iter
 
         print('Average time per iteration is: ' + str(avg_time) + 's')
-
         self.init_qorder(self.test)
         self.calc_t_nj_w(self.test)
         p_e = self.e_step(p_i, conf_mat_w, self.test)
         return self.infer_answers(p_e, self.test)
     #end function
 
-    ###########################
-    ### ORGANIZATIONAL PART ###
-    ###########################
-
-    def infer_answers(self, p_e, dataset):
-        answers = {}
-        i = 0
-        for q in dataset.questions.keys():
-            prob = [p_e[0][i], p_e[1][i]]
-            ans = self.idx_max(prob)
-            answers[q] = ans
-            i += 1
-        return answers
-
-
-    def idx_max(self,arr):
-        val = -1
-        i = -1
-
-        for e in range(0, len(arr)):
-            if arr[e] > val:
-                val = arr[e]
-                i = e
-
-        return i
 
     def convergence(self, priors, confusion, p_e):
         # pull up data from cache
@@ -139,9 +112,9 @@ class DawidSkene(CrowdAlgorithm):
         # check if this is first iteration, if yes convergence check can't be done
         if last_p_e is not None:
             # check one after another if p_e, priors and confusion matrices are converged
-            if self.checkConv_p_e(p_e, last_p_e):
-                if self.checkConv_priors(priors, last_priors):
-                    if self.checkConv_confusion(confusion, last_confusion):
+            if np.array_equal(np.round(p_e, 1), np.round(last_p_e, 1)) and \
+                    np.array_equal(np.round(priors, 1), np.round(last_priors, 1)) and\
+                    np.array_equal(np.round(confusion, 1), np.round(last_confusion, 1)):
                         converged = True
 
         # update cached values
@@ -151,28 +124,23 @@ class DawidSkene(CrowdAlgorithm):
         # return result
         return converged
 
-    # checks the convergene of the true labels
-    def checkConv_p_e(self, p_e, last_p_e):
-        for i in range(len(p_e)):
-            for j in range(len(p_e[i])):
-                if round(p_e[i][j], 1) != round(last_p_e[i][j], 1):
-                    return False
-        return True
 
-    def checkConv_priors(self, priors, last_priors):
-        for i in range(len(priors)):
-            if round(priors[i], 1) != round(last_priors[i], 1):
-                return False
-        return True
+    ###########################
+    ### ORGANIZATIONAL PART ###
+    ###########################
 
-    # checks the convergene of the confusion matrices
-    def checkConv_confusion(self, confusion, last_confusion):
-        for i in range(len(confusion)):
-            for j in range(len(confusion[i])):
-                for k in range(len(confusion[i][j])):
-                    if round(confusion[i][j][k], 1) != round(last_confusion[i][j][k], 1):
-                        return False
-        return True
+    def infer_answers(self, p_e, dataset):
+        answers = {}
+        i = 0
+        for q in dataset.questions.keys():
+
+            ans = np.argmax(p_e[:,i])
+            answers[q] = ans
+            i += 1
+
+        return answers
+
+
 
     def m_step(self, true_labels, trainset):
 
@@ -182,90 +150,53 @@ class DawidSkene(CrowdAlgorithm):
         # number of itemns
         n = len(trainset.questions.keys())
 
-        p_i = [0] * c
-        # count occurences of classes from true_labels in list
-        for i in range(0, len(true_labels)):
-            for x in true_labels[i]:
-                p_i[i] += x
-
-        # devide through number of items to get class prior
-        for i in range(0, len(p_i)):
-            p_i[i] = p_i[i] / n
-
-        print(p_i)
-        # Estimate the confusion matrices
-
-        #
-        T_ni = deepcopy(true_labels)
+        p_i = np.sum(true_labels,  axis=1) / n
 
         t_nj_w = self.t_nj_w
 
-        # confusion matrix
-        conf_mat_w = []
-        conf_top = 0.0
-        conf_bot = [0.0] * c
-        conf_mat = []
+        conf_mat_w = np.zeros([len(trainset.workers), c, c])
 
-        for _ in range(0, c):
-            conf_mat.append([0.0] * c)
+        for w_count in range(len(trainset.workers)):
+            for i in range(c):
+                for j in range(c):
+                    conf_mat_w[w_count, i, j] = np.dot(true_labels[i, :], t_nj_w[w_count, j, :])
 
-        conf_mat_blank = deepcopy(conf_mat)
-        for w_count in range(0, len(trainset.workers)):
-            for i in range(0, c):
-                for j in range(0, c):
-                    for item in range(0, n):
-                        conf_top += T_ni[i][item] * t_nj_w[w_count][j][item]
+                # divide the row through the sum of
+                conf_bot = np.sum(conf_mat_w[w_count, i, :])
+                if conf_bot > 0:
+                    conf_mat_w[w_count, i, :] = conf_mat_w[w_count, i, :] / conf_bot
 
-                    conf_mat[i][j] = conf_top
-                    conf_bot[i] += conf_top
-                    conf_top = 0.0
 
-            # divide the row through the sum of
-            for i in range(0, c):
-                for j in range(0, c):
-                    if conf_bot[i] > 0.0:
-                        conf_mat[i][j] = conf_mat[i][j]  / conf_bot[i]
-
-            conf_bot = [0] * c
-            conf_mat_w.append(conf_mat)
-            conf_mat = deepcopy(conf_mat_blank)
-
-        return deepcopy(p_i), deepcopy(conf_mat_w)
-
+        return (p_i, conf_mat_w)
 
     def e_step(self, p_i, conf_mat_w, trainset):
         c = self.C
         n = len(trainset.questions)
 
-        p_e= []
-        for _ in range(0, c):
-            p_e.append([0] * n)
-        p_et = 1
-        p_et_ave = 0
-        t_nj_w = self.t_nj_w
-        for a in range(0, n):
-            for i in range(0, c):
-                p_et = p_i[i]
-                for m in range(0, len(trainset.workers)):
-                    for j in range(0, c):
-                        p_et *= conf_mat_w[m][i][j] ** t_nj_w[m][j][a]
-                p_e[i][a] = p_et
-                p_et_ave += p_et
+        p_e = np.zeros([c, n])
+
+        conf_mat_w = np.array(conf_mat_w)
+        t_nj_w = np.array(self.t_nj_w)
+
+        for i in range(n):
+            for j in range(c):
+                p_et = p_i[j]
+                p_et *= np.prod(np.power(conf_mat_w[:, j, :], t_nj_w[:, :, i]))
+
+                p_e[j, i] = p_et
+
+            p_et_ave = np.sum(p_e[:, i])
 
             if p_et_ave > 0:
-                for x in range(0, c):
-                    p_e[x][a] = p_e[x][a] / p_et_ave
+                p_e[:, i] = p_e[:, i] / p_et_ave
 
-            p_et_ave = 0
-        return deepcopy(p_e)
+        return p_e
 
+    def random_init(self, trainset):
 
-    def random_init(self,trainset):
-        p_e = []
-        for _ in range(0, self.C):
-            p_e.append([0].copy() * len(trainset.questions.keys()))
+        p_e = np.zeros([self.C, len(trainset.questions.keys())])
 
-        for a in range(0, len(trainset.questions.keys())):
+        for a in range(0, len(self.full.questions.keys())):
             p_e[self.rng.randint(0, self.C - 1)][a] = 1
 
         return p_e
@@ -278,6 +209,7 @@ class DawidSkene(CrowdAlgorithm):
         for q in dataset.questions.keys():
             self.q_order[q] = i
             i += 1
+
 
     def calc_t_nj_w(self, dataset):
         c = self.C
@@ -298,7 +230,7 @@ class DawidSkene(CrowdAlgorithm):
             t_nj_w.append(t_nj)
             t_nj = deepcopy(t_nj_blank)
 
-        self.t_nj_w = t_nj_w
+        self.t_nj_w = np.array(t_nj_w)
 
     #@OVERRIDE
     def test(self, testset):

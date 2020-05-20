@@ -1,5 +1,6 @@
 #!/usr/bin/python
 import copy
+import time
 from random import Random
 from algorithms.algointerface import CrowdAlgorithm
 from algorithms.majorityvote import MajorityVoting
@@ -51,8 +52,10 @@ class DawidSkene(CrowdAlgorithm):
     def run(self):
         p_e = self.ds_init()
 
+        avg_time = 0
         # main loop
         for iter in range(0, self.max_iter):
+            t0 = time.time()
             print('Iteration' + str(iter) )
             # Step 1 [semi-supervision] : update p_e with train values
             for q,a in self.train.questions.items():
@@ -78,7 +81,17 @@ class DawidSkene(CrowdAlgorithm):
             # Step 4 [convergence check] : check if our iterations don't bring value any more
             if self.convergence(priors, confusion, p_e):
                 break
-        #end while
+
+            t1 = time.time()
+            avg_time += t1-t0
+        # end while
+
+        if iter != 0:
+            avg_time /= iter
+
+        print('Average time per iteration is: ' + str(avg_time) + 's')
+
+
 
         # return testset evaluated on best valid
         p_e = self.E_step(self.priors, self.confusion, self.test)
