@@ -5,7 +5,6 @@
 - algorithms - folder with api and implementation of algorithms
 - - Majority Voting
 - - Dawid and Skene (DS)
-- tba
 
 ### Dependencies and installation (Linux & macOS)
 
