@@ -79,7 +79,6 @@ class DawidSkene(CrowdAlgorithm):
 
             # Step 3 [validation] : check accuracy on validation and update the matrices
             _, _, f1score, _ = self.validate(self.validation, self.infer_answers(p_e, self.validation))
-            print("DEBUG", ("best_f1", self.bestf1), ("current_f1", f1score))
             if f1score >= self.bestf1:
                 self.bestf1 = f1score
                 (self.priors, self.confusion) = (p_i, conf_mat_w)
