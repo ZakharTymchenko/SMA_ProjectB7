@@ -9,11 +9,13 @@ from algorithms.datastructure import ArrangeData
 
 from algorithms.algointerface import CrowdAlgorithm
 from algorithms.majorityvote import MajorityVoting
-from algorithms.dawidskene_legacy import DawidSkene
+from algorithms.dawidskene_numpy import DawidSkene
+#from algorithms.dawidskene_legacy import DawidSkene
+#from algorithms.dawidskene import DawidSkene
 
 # this file is the entry point to the project, everything is branched from here
 
-# constants [todo: rework into CLI args with hardcoded defaults]
+# constants
 main_path = "data"
 split_seed = 2138796
 ds_seed = 9453657
